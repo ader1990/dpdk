@@ -329,9 +329,6 @@ pci_scan_one(const char *dirname, const struct rte_pci_addr *addr)
 			dev->kdrv = RTE_KDRV_IGB_UIO;
 		else if (!strcmp(driver, "uio_pci_generic"))
 			dev->kdrv = RTE_KDRV_UIO_GENERIC;
-		else if (!strcmp(driver, "mlx4_core") ||
-				!strcmp(driver, "mlx5_core"))
-			dev->kdrv = RTE_KDRV_NIC_MLX;
 		else
 			dev->kdrv = RTE_KDRV_UNKNOWN;
 	} else
@@ -581,20 +578,13 @@ pci_device_iova_mode(const struct rte_pci_driver *pdrv,
 			else
 				is_vfio_noiommu_enabled = 0;
 		}
-		if ((pdrv->drv_flags & RTE_PCI_DRV_IOVA_AS_VA) == 0) {
+		if (is_vfio_noiommu_enabled != 0)
 			iova_mode = RTE_IOVA_PA;
-		} else if (is_vfio_noiommu_enabled != 0) {
-			RTE_LOG(DEBUG, EAL, "Forcing to 'PA', vfio-noiommu mode configured\n");
-			iova_mode = RTE_IOVA_PA;
-		}
+		else if ((pdrv->drv_flags & RTE_PCI_DRV_IOVA_AS_VA) != 0)
+			iova_mode = RTE_IOVA_VA;
 #endif
 		break;
 	}
-
-	case RTE_KDRV_NIC_MLX:
-		if ((pdrv->drv_flags & RTE_PCI_DRV_IOVA_AS_VA) == 0)
-			iova_mode = RTE_IOVA_PA;
-		break;
 
 	case RTE_KDRV_IGB_UIO:
 	case RTE_KDRV_UIO_GENERIC:
@@ -602,8 +592,8 @@ pci_device_iova_mode(const struct rte_pci_driver *pdrv,
 		break;
 
 	default:
-		RTE_LOG(DEBUG, EAL, "Unsupported kernel driver? Defaulting to IOVA as 'PA'\n");
-		iova_mode = RTE_IOVA_PA;
+		if ((pdrv->drv_flags & RTE_PCI_DRV_IOVA_AS_VA) != 0)
+			iova_mode = RTE_IOVA_VA;
 		break;
 	}
 
@@ -615,10 +605,8 @@ pci_device_iova_mode(const struct rte_pci_driver *pdrv,
 		if (iommu_no_va == -1)
 			iommu_no_va = pci_one_device_iommu_support_va(pdev)
 					? 0 : 1;
-		if (iommu_no_va != 0) {
-			RTE_LOG(DEBUG, EAL, "Forcing to 'PA', IOMMU does not support IOVA as 'VA'\n");
+		if (iommu_no_va != 0)
 			iova_mode = RTE_IOVA_PA;
-		}
 	}
 	return iova_mode;
 }
